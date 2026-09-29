@@ -12,8 +12,9 @@ def select_to_serve(blocks: list[LoadBlock], capacity_kw: float):
     remaining=max(0.0,capacity_kw); served={}
     ordered=sorted(blocks,key=lambda b:(-b.priority,b.block_id))
     for b in ordered:
-        demand=max(0.0,b.kw)
-        floor=min(demand,max(0.0,b.min_service_kw))
+        # Cold-load pickup draws the inrush-adjusted demand, not the raw kW.
+        demand=max(0.0,b.kw)*max(0.0,b.cold_load_multiplier)
+        floor=min(demand,max(0.0,b.min_service_kw)*max(0.0,b.cold_load_multiplier))
         if remaining+1e-9 < floor: served[b.block_id]=0.0; continue
         take=min(demand,remaining); served[b.block_id]=take; remaining-=take
     return served

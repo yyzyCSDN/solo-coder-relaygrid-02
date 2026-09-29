@@ -22,13 +22,21 @@ def assess_island(load_kw: float, resources: list[Resource], reserve_fraction: f
     available=sum(max(0.0,r.available_kw) for r in resources)
     committed_reserve=sum(max(0.0,r.spinning_reserve_kw) for r in resources)
     required_reserve=load_kw*reserve_fraction
-    usable=max(0.0,available)
+    # Reserve that must stay committed and can never be served to load.
+    retained_reserve=required_reserve+committed_reserve
+    usable=max(0.0,available-retained_reserve)
     served=min(load_kw,usable)
     reserve=max(0.0,available-served)
     grid_former=any(r.grid_forming and r.available_kw>0 for r in resources)
     shortfall=max(0.0,load_kw-served)
-    feasible=grid_former and shortfall <= 1e-9 and reserve+1e-9 >= required_reserve and reserve+1e-9 >= committed_reserve
+    feasible=grid_former and shortfall <= 1e-9
     return IslandAssessment(feasible,served,reserve,shortfall,grid_former)
+
+def firm_capacity(resources: list[Resource], reserve_fraction: float=0.10) -> float:
+    """Largest load (kW) the island can actually supply while retaining its reserve."""
+    available=sum(max(0.0,r.available_kw) for r in resources)
+    if available <= 0: return 0.0
+    return assess_island(available,resources,reserve_fraction).served_kw
 
 def black_start_order(resources: list[Resource]):
     formers=[r for r in resources if r.grid_forming and r.available_kw>0]
