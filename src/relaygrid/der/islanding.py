@@ -17,17 +17,30 @@ class IslandAssessment:
     shortfall_kw: float
     has_grid_former: bool
 
+def _reserve_requirement_kw(load_kw: float, resources: list[Resource], reserve_fraction: float) -> float:
+    committed_reserve=sum(max(0.0,r.spinning_reserve_kw) for r in resources)
+    # Operating reserve scales with the demand the island actually carries.
+    covered_load=min(max(0.0,load_kw),sum(max(0.0,r.available_kw) for r in resources))
+    required_reserve=covered_load*reserve_fraction
+    return max(committed_reserve,required_reserve)
+
+def island_deliverable_kw(load_kw: float, resources: list[Resource], reserve_fraction: float=0.10) -> float:
+    # Reserve headroom (spinning reserve plus the operating-reserve fraction)
+    # is not available to serve load, so it is withheld up front.
+    available=sum(max(0.0,r.available_kw) for r in resources)
+    reserve_req=_reserve_requirement_kw(load_kw,resources,reserve_fraction)
+    return max(0.0,min(max(0.0,load_kw),available-reserve_req))
+
 def assess_island(load_kw: float, resources: list[Resource], reserve_fraction: float=0.10) -> IslandAssessment:
     if load_kw < 0 or reserve_fraction < 0: raise ValueError("invalid load or reserve")
     available=sum(max(0.0,r.available_kw) for r in resources)
-    committed_reserve=sum(max(0.0,r.spinning_reserve_kw) for r in resources)
-    required_reserve=load_kw*reserve_fraction
-    usable=max(0.0,available)
-    served=min(load_kw,usable)
+    reserve_req=_reserve_requirement_kw(load_kw,resources,reserve_fraction)
+    deliverable=island_deliverable_kw(load_kw,resources,reserve_fraction)
+    served=min(max(0.0,load_kw),deliverable)
     reserve=max(0.0,available-served)
     grid_former=any(r.grid_forming and r.available_kw>0 for r in resources)
     shortfall=max(0.0,load_kw-served)
-    feasible=grid_former and shortfall <= 1e-9 and reserve+1e-9 >= required_reserve and reserve+1e-9 >= committed_reserve
+    feasible=grid_former and shortfall <= 1e-9 and reserve+1e-9 >= reserve_req
     return IslandAssessment(feasible,served,reserve,shortfall,grid_former)
 
 def black_start_order(resources: list[Resource]):

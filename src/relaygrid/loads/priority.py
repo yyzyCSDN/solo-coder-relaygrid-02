@@ -8,11 +8,16 @@ class LoadBlock:
     min_service_kw: float=0.0
     cold_load_multiplier: float=1.0
 
+def _effective_kw(block: LoadBlock) -> float:
+    # Restoration picks blocks against their cold-load (inrush) demand,
+    # not the pre-outage diversified kW.
+    return max(0.0,block.kw*block.cold_load_multiplier)
+
 def select_to_serve(blocks: list[LoadBlock], capacity_kw: float):
     remaining=max(0.0,capacity_kw); served={}
     ordered=sorted(blocks,key=lambda b:(-b.priority,b.block_id))
     for b in ordered:
-        demand=max(0.0,b.kw)
+        demand=_effective_kw(b)
         floor=min(demand,max(0.0,b.min_service_kw))
         if remaining+1e-9 < floor: served[b.block_id]=0.0; continue
         take=min(demand,remaining); served[b.block_id]=take; remaining-=take
